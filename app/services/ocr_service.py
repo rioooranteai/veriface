@@ -368,7 +368,8 @@ class OCRService:
         self.debug = debug
         self.paddle_ocr = PaddleOCR(
             use_angle_cls=False,
-            lang='id'
+            lang='id',
+            enable_mkldnn=False
         )
 
     def extract_from_file(self, path: str) -> KTPData:
