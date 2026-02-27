@@ -6,11 +6,10 @@ import time
 from typing import Optional
 
 import numpy as np
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-
 from app.core.dependencies import get_ocr_service, get_yolo_service
 from app.schemas.models import OfferRequest
 from app.services.webrtc_service import WebRTCService
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webrtc", tags=["WebRTC"])
@@ -55,11 +54,8 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-
-# ─── YOLO Throttle ────────────────────────────────────────────────────────────
-
 class YOLOThrottle:
-    INTERVAL = 0.3  # ✅ 3 → 0.3 (3 fps, bukan 1 frame per 3 detik)
+    INTERVAL = 0.3
 
     def __init__(self) -> None:
         self._last_ts: float = 0.0
@@ -76,9 +72,9 @@ class YOLOThrottle:
 @router.post("/offer")
 async def offer(payload: OfferRequest) -> dict:
     global _main_loop
-    _main_loop = asyncio.get_running_loop()  # ✅ get_running_loop, bukan get_event_loop
+    _main_loop = asyncio.get_running_loop()
 
-    service  = get_webrtc_service()
+    service = get_webrtc_service()
     throttle = YOLOThrottle()
 
     def on_frame(frame: np.ndarray) -> None:
@@ -115,7 +111,7 @@ async def offer(payload: OfferRequest) -> dict:
 @router.post("/offer/face")
 async def offer_face(payload: OfferRequest) -> dict:
     global _main_loop
-    _main_loop = asyncio.get_running_loop()  # ✅ sama
+    _main_loop = asyncio.get_running_loop()
 
     service = get_webrtc_service()
 
@@ -142,12 +138,10 @@ async def offer_face(payload: OfferRequest) -> dict:
 # ─── YOLO Runner ─────────────────────────────────────────────────────────────
 
 async def _run_yolo(frame: np.ndarray, yolo_service) -> None:
-    logger.info("_run_yolo: started")
     loop = asyncio.get_running_loop()
 
     try:
         boxes = await loop.run_in_executor(None, yolo_service.predict, frame)
-        logger.info("_run_yolo: %d box ditemukan", len(boxes))
 
         if boxes:
             yolo_service.store_box(boxes[0])
@@ -155,7 +149,6 @@ async def _run_yolo(frame: np.ndarray, yolo_service) -> None:
                 "event": "yolo_result",
                 "boxes": [b.to_dict() for b in boxes],
             })
-            logger.info("YOLO KTP detected: score=%.2f", boxes[0].score)
         else:
             yolo_service.store_box(None)
             await manager.broadcast({"event": "no_ktp"})
@@ -174,7 +167,7 @@ async def notify(ws: WebSocket) -> None:
         await ws.send_json({"event": "connected", "message": "Siap menerima notifikasi."})
 
         while True:
-            data  = await ws.receive_json()
+            data = await ws.receive_json()
             event = data.get("event")
 
             if event == "capture":
@@ -189,35 +182,33 @@ async def notify(ws: WebSocket) -> None:
         manager.disconnect(ws)
 
 
-# ─── Capture Handler ──────────────────────────────────────────────────────────
-
 async def _handle_capture(ws: WebSocket) -> None:
-    ocr_service  = get_ocr_service()
+    ocr_service = get_ocr_service()
     yolo_service = get_yolo_service()
-    loop         = asyncio.get_running_loop()  # ✅ get_running_loop
+    loop = asyncio.get_running_loop()
 
     if yolo_service.last_frame is None:
         await ws.send_json({
-            "event":  "capture_failed",
+            "event": "capture_failed",
             "reason": "Belum ada frame yang diterima.",
         })
         return
 
     if yolo_service.last_box is None:
         await ws.send_json({
-            "event":  "capture_failed",
+            "event": "capture_failed",
             "reason": "KTP belum terdeteksi. Arahkan KTP ke kamera.",
         })
         return
 
     await ws.send_json({
-        "event":   "capture_processing",
+        "event": "capture_processing",
         "message": "Memproses OCR...",
     })
 
     try:
-        frame   = yolo_service.last_frame
-        box     = yolo_service.last_box
+        frame = yolo_service.last_frame
+        box = yolo_service.last_box
         cropped = yolo_service.crop(frame, box)
 
         ktp_data = await loop.run_in_executor(
@@ -226,7 +217,7 @@ async def _handle_capture(ws: WebSocket) -> None:
 
         await ws.send_json({
             "event": "ktp_result",
-            "data":  ktp_data.to_dict(),
+            "data": ktp_data.to_dict(),
         })
 
         logger.info(
@@ -238,6 +229,6 @@ async def _handle_capture(ws: WebSocket) -> None:
     except Exception as e:
         logger.error("Capture OCR error: %s", e)
         await ws.send_json({
-            "event":  "capture_failed",
+            "event": "capture_failed",
             "reason": f"OCR error: {str(e)}",
         })

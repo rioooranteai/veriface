@@ -37,8 +37,7 @@ class WebRTCService:
                     frame = await track.recv()
                     img = frame.to_ndarray(format="bgr24")
                     frame_count += 1
-                    if frame_count % 30 == 0:
-                        logger.info("Frame consumed: %d", frame_count)
+
                     callback(img)
                 except Exception as e:
                     logger.info("Track ended atau error: %s", e)
